@@ -4,112 +4,134 @@ Araj Shah
 @03056118 
 """
 
-class TrieNode:
-    def __init__(self):
-        # Each TrieNode contains a dictionary of children (letters) and a boolean flag indicating if it's the end of a word
-        self.children = {}
-        self.is_end_of_word = False
-
-class Trie:
-    def __init__(self):
-        # Initialize the Trie with a root node
-        self.root = TrieNode()
-    
-    def insert(self, word):
-        # Insert a word into the Trie
-        node = self.root
-        i = 0
-        while i < len(word):
-            # Check for multi-character sequences like "St" or "Qu"
-            if i + 1 < len(word) and word[i:i+2] in ["St", "Qu"]:  # Adjust this based on known sequences
-                seq = word[i:i+2]
-                if seq not in node.children:
-                    node.children[seq] = TrieNode()
-                node = node.children[seq]
-                i += 2  # Move past the multi-character sequence
-            else:
-                char = word[i]
-                if char not in node.children:
-                    node.children[char] = TrieNode()
-                node = node.children[char]
-                i += 1
-        node.is_end_of_word = True
-
 class Boggle:
-    def __init__(self, grid, dictionary):
-        # Initialize the Boggle game with the grid and dictionary
-        self.grid = grid
-        
-        # Create a Trie and insert all words from the dictionary into the Trie
-        self.trie = Trie()
+    def __init__(self, board, dictionary):
+        """
+        Initialize the Boggle game with the given board and dictionary.
+        """
+        if not self.is_valid_grid(board):
+            self.board = []
+            self.n = 0
+        else:
+            self.board = [[cell.upper() for cell in row] for row in board]
+            self.n = len(board)
+
+        self.dictionary = set(word.upper() for word in dictionary)
+        self.prefixes = self.build_prefixes(self.dictionary)
+        self.directions = [
+            (-1, -1), (-1, 0), (-1, 1),
+            (0, -1),          (0, 1),
+            (1, -1),  (1, 0), (1, 1)
+        ]
+
+    def is_valid_grid(self, board):
+        """
+        Check if the input grid is valid.
+        """
+        if not board or not all(board):
+            return False
+        row_lengths = set(len(row) for row in board)
+        return len(row_lengths) == 1  # All rows should have the same length
+
+    def build_prefixes(self, dictionary):
+        """
+        Build a set of all possible prefixes from the dictionary.
+
+        :param dictionary: A set of valid words.
+        :return: A set containing all possible prefixes.
+        """
+        prefixes = set()
         for word in dictionary:
-            self.trie.insert(word)
-        
-        # Result set to store found words
-        self.result = set()
-        
-        # Number of rows and columns in the grid
-        self.rows = len(grid)
-        self.cols = len(grid[0])
-        
-        # Visited array to track visited cells during DFS
-        self.visited = [[False for _ in range(self.cols)] for _ in range(self.rows)]
-    
-    def search_words(self):
-        # Iterate over each cell in the grid and start a DFS search
-        for row in range(self.rows):
-            for col in range(self.cols):
-                # Start DFS from each cell
-                self._dfs(row, col, self.trie.root, "")
-        
-        # Return the list of found words
-        return list(self.result)
-    
-    def _dfs(self, row, col, node, path):
-        # Boundary checks to ensure we're within the grid
-        if row < 0 or row >= self.rows or col < 0 or col >= self.cols or self.visited[row][col]:
+            for i in range(1, len(word)):
+                prefixes.add(word[:i])
+        return prefixes
+
+    def dfs(self, i, j, visited, current_word):
+        """
+        Perform Depth-First Search from the cell (i, j).
+        """
+        if i < 0 or i >= self.n:
             return
-        
-        # Get the current letter from the grid
-        letter = self.grid[row][col]
-        
-        # If the letter is not a valid child in the Trie, prune the search
-        if letter not in node.children:
+        if j < 0 or j >= len(self.board[i]):
             return
-        
-        # Mark the cell as visited
-        self.visited[row][col] = True
-        
-        # Move to the next node in the Trie corresponding to the letter
-        node = node.children[letter]
-        
-        # Append the letter to the current path
-        path += letter
-        
-        # If we reach the end of a word in the Trie, add it to the result set
-        if node.is_end_of_word:
-            self.result.add(path)
-        
-        # Explore all 8 possible directions around the current cell
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
-        for dx, dy in directions:
-            self._dfs(row + dx, col + dy, node, path)
-        
-        # Unmark the cell as visited when backtracking
-        self.visited[row][col] = False
+        if visited[i][j]:
+            return
+
+        current_word.append(self.board[i][j])
+        extra_chars = 0
+
+        if self.board[i][j] == 'Q':
+            current_word.append('U')
+            extra_chars += 1
+
+        if self.board[i][j] == 'S':
+            if len(current_word) >= 2 and current_word[-2] == 'Q':
+                pass
+            else:
+                current_word.append('T')
+                extra_chars += 1
+
+        word = ''.join(current_word)
+
+        if word not in self.prefixes and word not in self.dictionary:
+            for _ in range(1 + extra_chars):
+                if current_word:
+                    current_word.pop()
+            return
+
+        if len(word) >= 3 and word in self.dictionary:
+            self.found_words.add(word)
+
+        visited[i][j] = True
+
+        for di, dj in self.directions:
+            ni, nj = i + di, j + dj
+            self.dfs(ni, nj, visited, current_word)
+
+        visited[i][j] = False
+        for _ in range(1 + extra_chars):
+            if current_word:
+                current_word.pop()
+
+    def getSolution(self):
+        """
+        Find all valid words on the Boggle board based on the dictionary.
+        """
+        self.found_words = set()
+        if self.n == 0:
+            return []
+        visited = [[False for _ in row] for row in self.board]
+
+        for i in range(self.n):
+            for j in range(len(self.board[i])):
+                self.dfs(i, j, visited, [])
+
+        return sorted(list(self.found_words))
+
 
 def main():
-    grid = [ ["T", "R", "E", "E"],
-            ["A", "St", "O", "Qu"],
-            ["S", "M", "T", "N"],
-            ["P", "L", "A", "Y"]
-           ]
-    
-    dictionary = ["TREE", "TO", "StONE", "StOQuE", "QuEEN", "PLAY", "StO", "StREAM"]
+    """
+    Example usage of the Boggle class.
+    """
+    # Example grid that should pass 'test_isValid_Grid'
+    grid = [
+        ['D', 'E', 'F'],
+        ['E', 'A', 'B'],
+        ['E', 'B', 'C'],
+        ['E', 'C', 'B'],
+        ['E', 'D', 'B'],
+        ['E', 'F', 'B'],
+        ['E', 'G', 'H'],
+        ['E', 'H', 'I'],
+        ['E', 'I', 'H']
+    ]
 
+    dictionary = ['DEF', 'EAB', 'EBC',
+                  'ECB', 'EDB', 'EFB',
+                  'EGH', 'EHI', 'EIH']
     mygame = Boggle(grid, dictionary)
-    foundWords = mygame.search_words()
-    print("Found Words: ", foundWords)
-    
+    print(sorted(mygame.getSolution()))
+
+
 if __name__ == "__main__":
     main()
